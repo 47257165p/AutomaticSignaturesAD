@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="gdata-appsforyourdomain-1.0">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/Desktop/gdata/java/lib/gdata-appsforyourdomain-1.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$USER_HOME$/Desktop/gdata/java" />
+    </SOURCES>
+  </library>
+</component>

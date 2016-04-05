@@ -12,25 +12,27 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 
-import com.google.api.services.drive.DriveScopes;
-import com.google.api.services.drive.model.*;
 import com.google.api.services.drive.Drive;
+import com.google.gdata.client.spreadsheet.SpreadsheetService;
+import com.google.gdata.data.spreadsheet.*;
+import com.google.gdata.util.AuthenticationException;
+import com.google.gdata.util.ServiceException;
+import gmailsettings.GmailSettingsService;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class Controller {
     /** Application name. */
     private static final String APPLICATION_NAME =
-            "Drive API Java Quickstart";
+            "AutomaticSignatures";
 
     /** Directory to store user credentials for this application. */
     private static final java.io.File DATA_STORE_DIR = new java.io.File(
-            System.getProperty("user.home"), ".credentials/drive-java-quickstart.json");
+            System.getProperty("user.home"), ".credentials/google-credentials.json");
 
     /** Global instance of the {@link FileDataStoreFactory}. */
     private static FileDataStoreFactory DATA_STORE_FACTORY;
@@ -51,7 +53,9 @@ public class Controller {
      * at ~/.credentials/drive-java-quickstart.json
      */
     private static final List<String> SCOPES =
-            Arrays.asList(DriveScopes.DRIVE);
+            Arrays.asList(
+                    "https://apps-apis.google.com/a/feeds/emailsettings/2.0/",
+                    "https://spreadsheets.google.com/feeds");
 
     static {
         try {
@@ -62,6 +66,8 @@ public class Controller {
             System.exit(1);
         }
     }
+
+    private static String domain_name = "as.cloudimpulsion.com";
 
     /**
      * Creates an authorized Credential object.
@@ -94,49 +100,98 @@ public class Controller {
      * @return an authorized Drive client service
      * @throws IOException
      */
-    public static Drive getDriveService() throws IOException {
-        Credential credential = authorize();
-        return new Drive.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, credential)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
+
+    public static void main(String[] args) throws IOException, ServiceException {
+        // Build a new authorized API client service.
+
+        getSpreadSheetInfo(authorize());
+
+        /*try {
+            updateSignature(authorize());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
     }
 
-    public static void main(String[] args) throws IOException {
-        // Build a new authorized API client service.
-        Drive service = getDriveService();
+    private static void getSpreadSheetInfo(Credential credential) throws IOException, ServiceException
+    {
+        SpreadsheetService service =
+                new SpreadsheetService("MySpreadsheetIntegration-v1");
 
-        // Print the names and IDs for up to 10 files.
-        FileList result = service.files().list()
-                .setFields("nextPageToken, files(id, name, permissions)")
-                .execute();
-        List<File> files = result.getFiles();
-        if (files == null || files.size() == 0) {
-            System.out.println("No files found.");
-        } else {
-            System.out.println("Files:");
+        // We give the credentials to work using Oauth2.0
+        service.setOAuth2Credentials(credential);
 
-            boolean done = false;
-            for (File file : files) {
-                System.out.println("File name: "+file.getName()+
-                        "\nFile id: "+file.getId()+
-                        "\nPermissions: "+file.getPermissions()+"\n");
+        // Define the URL to request.  This should never change.
+        URL SPREADSHEET_FEED_URL = new URL(
+                "https://spreadsheets.google.com/feeds/spreadsheets/private/full");
 
-                for (Permission permission: file.getPermissions())
-                {
-                    if (permission.getEmailAddress().equals(ADMIN_EMAIL))
-                    {
+        // Make a request to the API and get all spreadsheets.
+        SpreadsheetFeed feed = service.getFeed(SPREADSHEET_FEED_URL,
+                SpreadsheetFeed.class);
+        List<SpreadsheetEntry> spreadsheets = feed.getEntries();
 
-                        done = true;
-                        break;
-                    }
-                }
-                if (!done)
-                {
-                    Permission permission;
-                }
-            }
-            System.out.println(service.permissions());
+        if (spreadsheets.size() == 0) {
+            // TODO: There were no spreadsheets, act accordingly.
         }
+
+        // Search for the needed spreadsheet where we store the signature settings
+        SpreadsheetEntry spreadsheet = null;
+
+        for (SpreadsheetEntry entry: spreadsheets) {
+            if (entry.getTitle().getPlainText().equals("TestingSignatures"))
+            {
+                spreadsheet = entry;
+            }
+        }
+        if (spreadsheet != null)
+        {
+            System.out.println(spreadsheet.getTitle().getPlainText());
+
+            WorksheetFeed worksheetFeed = service.getFeed(
+                    spreadsheet.getWorksheetFeedUrl(), WorksheetFeed.class);
+            List<WorksheetEntry> worksheets = worksheetFeed.getEntries();
+            WorksheetEntry worksheet = worksheets.get(0);
+
+            // Fetch the list feed of the worksheet.
+            URL listFeedUrl = worksheet.getListFeedUrl();
+            System.out.println(listFeedUrl);
+            ListFeed listFeed = service.getFeed(listFeedUrl, ListFeed.class);
+
+
+            // Iterate through each row, printing its cell values.
+            //WARNING, It just reads from the second row until the first blank row
+
+            int columna = 1;
+            for (ListEntry row : listFeed.getEntries()) {
+                // Print the first column's cell value
+                System.out.print(row.getTitle().getPlainText() + "\t");
+                // Iterate over the remaining columns, and print each cell value
+                for (String tag : row.getCustomElements().getTags()) {
+                    System.out.print("Columna "+columna+". "+row.getCustomElements().getValue(tag) + "\t");
+                    columna++;
+                }
+                columna = 1;
+            }
+        }
+        else
+        {
+            //TODO: The specified spreadsheet is not found at the list.
+        }
+    }
+
+    private static void updateSignature(Credential credential) throws Exception {
+
+        GmailSettingsService service = new GmailSettingsService(APPLICATION_NAME, domain_name, null, null){
+            @Override
+            public void setUserCredentials(String username, String password)
+                    throws AuthenticationException {
+                // Nothing to do here, just Overriding the old method and setting it to null so we can later setOauthCredentials to the service
+            }};
+
+        service.setOAuth2Credentials(credential);
+        List users=new ArrayList();
+        users.add("abell");
+        service.changeSignature(users,
+                "This is abell signature by Alejandro");
     }
 }
