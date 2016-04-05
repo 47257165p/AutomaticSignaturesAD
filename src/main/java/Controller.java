@@ -161,17 +161,31 @@ public class Controller {
             // Iterate through each row, printing its cell values.
             //WARNING, It just reads from the second row until the first blank row
 
-            int columna = 1;
+            int column = 1;
+
+            //Creating an arraylist with 2 arraylists to introduce email at 0 and signature at 1
+            ArrayList<ArrayList<String>> mailAndSignature = new ArrayList<>();
+            mailAndSignature.add(new ArrayList<String>());
+            mailAndSignature.add(new ArrayList<String>());
             for (ListEntry row : listFeed.getEntries()) {
-                // Print the first column's cell value
-                System.out.print(row.getTitle().getPlainText() + "\t");
+
                 // Iterate over the remaining columns, and print each cell value
                 for (String tag : row.getCustomElements().getTags()) {
-                    System.out.print("Columna "+columna+". "+row.getCustomElements().getValue(tag) + "\t");
-                    columna++;
+                    if (column == 1)
+                    {
+                        //Add
+                        mailAndSignature.get(0).add(row.getCustomElements().getValue(tag));
+                    }
+                    if (column == 2)
+                    {
+                        mailAndSignature.get(1).add(row.getCustomElements().getValue(tag));
+                        break;
+                    }
+                    column++;
                 }
-                columna = 1;
+                column = 1;
             }
+            System.out.println(mailAndSignature);
         }
         else
         {
